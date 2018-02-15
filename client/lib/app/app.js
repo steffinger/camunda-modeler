@@ -252,6 +252,24 @@ function App(options) {
           icon: 'icon-distribute-vertically-tool',
           label: 'Distribute Elements Vertically',
           action: this.compose('triggerAction', 'distributeVertically')
+        }),
+        Separator(),
+        MultiButton({
+          id: 'deploy',
+          choices: [
+            {
+              id: 'deploy-bpmn',
+              icon: 'icon-deploy',
+              label: 'Deploy Current Process',
+              action: this.compose('triggerAction', 'show-deployment-config'),
+              primary: true
+            },
+            {
+              id: 'deploy-endpoint-config',
+              label: 'Configure BPMN Deployment',
+              action: this.compose('triggerAction', 'show-engine-config')
+            }
+          ]
         })
       ]
     }
@@ -273,6 +291,14 @@ function App(options) {
 
   this.fileHistory = [];
 
+
+  this.events.on('deploy:endpoint:update', endpoints => {
+    this.persistEndpoints(endpoints);
+  });
+
+  this.events.on('deploy:bpmn', (payload, done) => {
+    this.triggerAction('deploy-bpmn', payload, done);
+  });
 
   this.events.on('workspace:changed', debounce((done) => {
     this.persistWorkspace((err) => {
@@ -338,6 +364,13 @@ function App(options) {
     // update set color button state
     button = find(this.menuEntries.bpmn.buttons, { id: 'set-color' });
     button.disabled = !newState.elementsSelected;
+
+    // update deploy status
+    if (typeof newState.deployDisabled !== 'undefined') {
+      button = find(this.menuEntries.bpmn.buttons, { id: 'deploy-bpmn' });
+      button.disabled = newState.deployDisabled;
+    }
+
 
     this.events.emit('changed');
   });
@@ -411,7 +444,8 @@ App.prototype.render = function() {
       <ModalOverlay
         isActive={ this._activeOverlay }
         content={ this._overlayContent }
-        events={ this.events } />
+        events={ this.events }
+        endpoints={ this.endpoints }/>
       <MenuBar entries={ this.menuEntries } />
       <Tabbed
         className="main"
@@ -561,11 +595,28 @@ App.prototype.openDiagram = function() {
 };
 
 
-App.prototype.triggerAction = function(action, options) {
+App.prototype.triggerAction = function(action, firstArg, secondArg) {
+
+  /**
+   * done: callback passed
+   * this makes sure to support passing callback to this function
+   * callback can be passed in 2nd or 3rd position
+   */
+  var options = firstArg,
+      done    = function() {};
+
+  if (typeof firstArg === 'function') {
+    done = firstArg;
+    options = secondArg;
+  } else if (typeof secondArg === 'function') {
+    done = secondArg;
+  }
 
   debug('trigger-action', action, options);
 
   var activeTab = this.activeTab;
+  var browser = this.browser;
+
 
   if (action === 'select-tab') {
     if (options === 'next') {
@@ -652,6 +703,37 @@ App.prototype.triggerAction = function(action, options) {
     return this.exportTab(activeTab, options.type);
   }
 
+  if (action === 'show-deployment-config') {
+    return this.toggleOverlay('deploymentConfig');
+  }
+
+  if (action === 'show-engine-config') {
+    return this.toggleOverlay('endpointConfig');
+  }
+
+  if (action === 'deploy-bpmn') {
+    // make sure to save the active tab's file before deploying
+    return this.saveTab(activeTab, function(err) {
+      if (err) {
+        console.error('deploy:bpmn ' + err);
+        return done(err);
+      }
+
+      var payload = {
+        file: activeTab.file,
+        deploymentName: options.deploymentName,
+        tenantId: options.tenantId
+      };
+
+      browser.send('deploy:bpmn', payload, function(err, response) {
+        if (err) {
+          console.error('deploy:bpmn ' + err);
+          return done(err);
+        }
+        return done();
+      });
+    });
+  }
   // forward other actions to active tab
   activeTab.triggerAction(action, options);
 };
@@ -1242,6 +1324,9 @@ App.prototype.persistWorkspace = function(done) {
   // let others store stuff, too
   this.events.emit('workspace:persist', config);
 
+  //store bpmn deploy url
+  config.endpoints = this.endpoints;
+
   // actually save
   this.workspace.save(config, (err, config) => {
     this.events.emit('workspace:persisted', err, config);
@@ -1269,7 +1354,10 @@ App.prototype.restoreWorkspace = function(done) {
         open: false,
         height: 150
       }
-    }
+    },
+    endpoints: [
+      'http://localhost:8080/engine-rest/deployment/create'
+    ]
   };
 
 
@@ -1289,6 +1377,8 @@ App.prototype.restoreWorkspace = function(done) {
     if (workspaceConfig.activeTab && workspaceConfig.activeTab !== -1) {
       this.activeTab = this.tabs[workspaceConfig.activeTab];
     }
+
+    this.endpoints = workspaceConfig.endpoints || defaultWorkspace.endpoints;
 
     this.events.emit('layout:update', workspaceConfig.layout);
 
@@ -1476,6 +1566,16 @@ App.prototype.quit = function() {
   }, {
     skipIfDiscardChanges: true
   });
+};
+
+
+/**
+ * Changes and persist bpmn deployment url
+ * @param url
+ */
+App.prototype.persistEndpoints = function(_endpoints) {
+  this.endpoints = _endpoints;
+  this.events.emit('workspace:changed');
 };
 
 var rdebug = require('debug')('app - external change');

@@ -2,21 +2,77 @@
 
 var inherits = require('inherits');
 
+var domClosest = require('min-dom/lib/closest');
+
 var BaseComponent = require('base/component');
 
 var isMac = require('util/is-mac'),
     ensureOpts = require('util/ensure-opts');
 
 
-function hasClass(node, cls) {
-  if (!node.classList) {
-    return;
+function ModalOverlay(options) {
+  ensureOpts([ 'events', 'isActive', 'content', 'endpoints' ], options);
+
+  BaseComponent.call(this, options);
+
+  var events = options.events;
+
+  if (!(this instanceof ModalOverlay)) {
+    return new ModalOverlay(options);
   }
 
-  return node.classList.contains(cls);
-}
+  this.closeOverlay = function(event, forceClose) {
+    var target = event && event.target;
 
-function ModalOverlay(options) {
+    if (!this._content || !forceClose && target && domClosest(target, '.overlay-container')) {
+      return;
+    }
+
+    this._content = null;
+
+    events.emit('dialog-overlay:toggle', false);
+  };
+
+  // endpoint configuration modal
+  var endpoint = (options.endpoints || [])[0];
+
+  this.updateEndpoint = function(e) {
+    endpoint = e.target.value;
+  };
+
+  this.submitEndpointConfigForm = function(e) {
+    e.preventDefault();
+    events.emit('deploy:endpoint:update', [ endpoint ]);
+    this.closeOverlay();
+  };
+
+  var ENDPOINT_CONFIG_OVERLAY = (
+    <div className="endpoint-configuration">
+      <h2>Deployment Endpoint Configuration</h2>
+      <form className="endpoint-configuration-form" onSubmit={this.compose(this.submitEndpointConfigForm)}>
+        <div className="form-row form-flex-row">
+          <label
+            htmlFor="endpoint-url">
+            Endpoint URL
+          </label>
+          <input
+            id='endpoint-url'
+            type='text'
+            value={endpoint}
+            onChange={this.compose(this.updateEndpoint)}/>
+          <button type="submit"> Save </button>
+          <button
+            type="button"
+            className='hide-dialog'
+            onClick={ this.compose(this.closeOverlay, true) }>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+
+  // shortcuts modal
   var modifierKey = 'Control';
 
   if (isMac()) {
@@ -59,19 +115,69 @@ function ModalOverlay(options) {
     </div>
   );
 
-  var availableContent = {
-    shortcuts: SHORTCUTS_OVERLAY
+  /**
+   * Deployment configuration
+   */
+
+  var deploymentName, tenantId;
+  this.updateDeploymentName = function(e) {
+    deploymentName = e.target.value;
+  };
+  this.updateTenantId = function(e) {
+    tenantId = e.target.value;
   };
 
-  ensureOpts([ 'events', 'isActive', 'content' ], options);
+  this.submitDeploymentConfigForm = function(e) {
+    e.preventDefault();
+    events.emit('deploy:bpmn', {
+      deploymentName: deploymentName,
+      tenantId: tenantId
+    }, (err) => {
+      if (err) {
+        console.error(err);
+      }
 
-  BaseComponent.call(this, options);
+      this.closeOverlay();
+    });
+  };
 
-  var events = options.events;
+  var deploymentConfig = (
+    <div className="deployment-configuration">
+      <h2>Deployment Configuration</h2>
+      <form className="deployment-configuration-form" onSubmit={this.compose(this.submitDeploymentConfigForm)}>
+        <div className="form-row form-flex-row">
+          <label htmlFor="deployment-name">Deployment Name</label>
+          <input
+            id="deployment-name"
+            type="text"
+            onChange={this.compose(this.updateDeploymentName)}
+            required/>
+        </div>
+        <div className="form-row form-flex-row">
+          <label htmlFor="tenant-id">Tenant Id</label>
+          <input
+            id="tenant-id"
+            type="text"
+            onChange={this.compose(this.updateTenantId)}/>
+        </div>
+        <div className="form-row form-btn-row">
+          <button type="submit"> Deploy </button>
+          <button
+            type="button"
+            className='hide-dialog'
+            onClick={ this.compose(this.closeOverlay, true) }>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 
-  if (!(this instanceof ModalOverlay)) {
-    return new ModalOverlay(options);
-  }
+  var availableContent = {
+    shortcuts: SHORTCUTS_OVERLAY,
+    endpointConfig: ENDPOINT_CONFIG_OVERLAY,
+    deploymentConfig: deploymentConfig
+  };
 
   this.getContent = function(content) {
     this._content = availableContent[content];
@@ -83,17 +189,6 @@ function ModalOverlay(options) {
     return this._content;
   };
 
-  this.closeOverlay = function(event) {
-    var target = event.target;
-
-    if (!this._content || !hasClass(target, 'dialog-overlay')) {
-      return;
-    }
-
-    this._content = null;
-
-    events.emit('dialog-overlay:toggle', false);
-  };
 
   this.render = function() {
 

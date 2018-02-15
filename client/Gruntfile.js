@@ -10,22 +10,6 @@ module.exports = function(grunt) {
 
     pkg: grunt.file.readJSON('package.json'),
 
-    eslint: {
-      check: {
-        src: [
-          '{lib,test}/**/*.js'
-        ]
-      },
-      fix: {
-        src: [
-          '{lib,test}/**/*.js'
-        ],
-        options: {
-          fix: true
-        }
-      }
-    },
-
     karma: {
       options: {
         configFile: 'test/config/karma.unit.js'
@@ -47,19 +31,49 @@ module.exports = function(grunt) {
     copy: {
       html: {
         files: [
-          { src: 'lib/index.html', dest: '../public/index.html' }
+          {
+            src: 'lib/index.html',
+            dest: '../public/index.html'
+          }
         ]
       },
-      fonts: {
+      app_fonts: {
         files: [
           {
-            src: [
-              'fonts/{app,bpmn,dmn}.*',
-              'node_modules/cmmn-js/assets/cmmn-font/font/cmmn.*'
-            ],
-            dest: '../public/fonts',
+            src: 'fonts/app.*',
+            dest: '../public/fonts/',
             expand: true,
             flatten: true
+          }
+        ]
+      },
+      cmmn_js: {
+        files: [
+          {
+            cwd: 'node_modules/cmmn-js/dist/',
+            src: [ '**/*', '!**/*.js' ],
+            dest: '../public/vendor/cmmn-js/',
+            expand: true
+          }
+        ]
+      },
+      bpmn_js: {
+        files: [
+          {
+            cwd: 'node_modules/bpmn-js/dist/',
+            src: [ '**/*', '!**/*.js' ],
+            dest: '../public/vendor/bpmn-js/',
+            expand: true
+          }
+        ]
+      },
+      diagram_js: {
+        files: [
+          {
+            cwd: 'node_modules/diagram-js/',
+            src: [ '!**/*.js', 'assets/**/*' ],
+            dest: '../public/vendor/diagram-js/',
+            expand: true
           }
         ]
       }
@@ -84,8 +98,7 @@ module.exports = function(grunt) {
       less: {
         files: [
           '{lib,styles}/**/*.less',
-          'node_modules/diagram-js/assets/**/*.less',
-          'node_modules/diagram-js/assets/**/*.css',
+          'node_modules/diagram-js/assets/**.css',
           'node_modules/bpmn-js-properties-panel/styles/**/*.less'
         ],
         tasks: [ 'less' ]
@@ -101,10 +114,6 @@ module.exports = function(grunt) {
 
   // tasks
 
-  grunt.registerTask('lint', [ 'eslint:check' ]);
-
-  grunt.registerTask('lint-fix', [ 'eslint:fix' ]);
-
   grunt.registerTask('test', [ 'karma:single' ]);
 
   grunt.registerTask('auto-test', [ 'karma:unit' ]);
@@ -116,7 +125,6 @@ module.exports = function(grunt) {
   ]);
 
   grunt.registerTask('default', [
-    'lint',
     'test',
     'build-client'
   ]);

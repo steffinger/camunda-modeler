@@ -24,7 +24,8 @@ var Platform = require('./platform'),
     Dialog = require('./dialog'),
     Menu = require('./menu'),
     Cli = require('./cli'),
-    Plugins = require('./plugins');
+    Plugins = require('./plugins'),
+    deployBPMN = require('./deploy');
 
 var browserOpen = require('./util/browser-open'),
     renderer = require('./util/renderer');
@@ -59,7 +60,8 @@ global.modelerDirectory = process.cwd();
 //
 // TODO(nikku): remove app.menu binding when development
 // mode bootstrap issue is fixed in electron-connect
-app.menu = new Menu(process.platform,
+app.menu = new Menu(
+  process.platform,
   plugins.getPlugins()
     .map(p => {
       return {
@@ -68,7 +70,7 @@ app.menu = new Menu(process.platform,
         error: p.error
       };
     })
-  );
+);
 
 // bootstrap workspace behavior
 new Workspace(config);
@@ -150,6 +152,25 @@ renderer.on('dialog:saving-denied', function(done) {
 
 renderer.on('dialog:content-changed', function(done) {
   dialog.showDialog('contentChanged', done);
+});
+
+renderer.on('deploy:bpmn', function(data, done) {
+
+  deployBPMN({
+    data: data,
+    config: config
+  }, function(err, result) {
+
+    if (err) {
+      console.error('failed to deploy', err);
+
+      // must stringify errors before passing them to client
+      err = err.message;
+    }
+
+    done(err, result);
+  });
+
 });
 
 

@@ -21,6 +21,7 @@ var arg = require('test/helper/util/arg'),
     spy = require('test/helper/util/spy');
 
 var bpmnXML = require('app/tabs/bpmn/initial.bpmn'),
+    cmmnXML = require('app/tabs/cmmn/initial.cmmn'),
     activitiXML = require('test/fixtures/activiti.xml'),
     drdXML = require('test/fixtures/drd.dmn'),
     dmnXML = require('app/tabs/dmn/table.dmn');
@@ -30,6 +31,7 @@ var MultiEditorTab = require('app/tabs/multi-editor-tab');
 var BaseEditor = require('app/editor/base-editor');
 
 var Tab = require('base/components/tab');
+var browser = require('test/helper/mock/browser');
 
 
 function createBpmnFile(xml, overrides) {
@@ -61,6 +63,16 @@ function createDmnFile(xml, overrides) {
   }, overrides);
 }
 
+function createCmmnFile(xml, overrides) {
+  return assign({
+    name: 'diagram_1.cmmn',
+    path: 'diagram_1.cmmn',
+    contents: xml,
+    fileType: 'cmmn',
+    lastModified: new Date().getTime()
+  }, overrides);
+}
+
 var UNSAVED_FILE = { path: '[unsaved]' };
 
 
@@ -87,7 +99,8 @@ describe('App', function() {
       logger: logger,
       workspace: workspace,
       plugins: plugins,
-      metaData: {}
+      metaData: {},
+      browser: browser
     });
 
   });
@@ -247,6 +260,75 @@ describe('App', function() {
       // then
       // expect BPMN tab with editor to be shown
       expect(select('.keyboard-shortcuts', tree)).to.not.exist;
+    });
+
+    it('should render endpoints configuration modal and close it', function() {
+      // when
+      // endpointConfig is toggled first time
+      app.toggleOverlay('endpointConfig');
+      var tree = render(app);
+
+
+      // then
+      // config modal should show
+      expect(select('.endpoint-configuration', tree)).to.exist;
+
+      // when
+      // endpointConfig is toggled second time
+      app.toggleOverlay(false);
+      tree = render(app);
+
+      // then
+      // config modal should disappear
+      expect(select('.endpoint-configuration', tree)).to.not.exist;
+    });
+
+
+    describe('deployment configuration modal', function() {
+      it('should render deployment configuration modal and close it', function() {
+        // when
+        // endpointConfig is toggled first time
+        app.toggleOverlay('deploymentConfig');
+        var tree = render(app);
+
+
+        // then
+        // config modal should show
+        expect(select('.deployment-configuration', tree)).to.exist;
+
+        // when
+        // endpointConfig is toggled second time
+        app.toggleOverlay(false);
+        tree = render(app);
+
+        // then
+        // config modal should disappear
+        expect(select('.deployment-configuration', tree)).to.not.exist;
+      });
+
+      it('should only submit deployment configuration form if there is a deployment name', function() {
+        // when
+        // endpointConfig is toggled first time
+        app.saveTab = function() {};
+        app.toggleOverlay('deploymentConfig');
+        var tree = render(app);
+        var deploymentNameInput = select('#deployment-name]', tree);
+
+        //then
+        expect(deploymentNameInput.properties.required).to.be.true;
+
+
+        //when
+        var triggerAction = spy(app, 'triggerAction');
+        var deploymentConfigForm = select('.deployment-configuration-form', tree);
+        simulateEvent(deploymentConfigForm, 'submit', { preventDefault: function() {} });
+
+        //then
+        expect(triggerAction).to.be.called;
+
+
+      });
+
     });
 
 
@@ -562,11 +644,19 @@ describe('App', function() {
     it('should create new BPMN tab', function() {
 
       // when
-      app.createDiagram('bpmn');
-
-      var tree = render(app);
+      var newTab = app.createDiagram('bpmn');
 
       // then
+      expect(newTab).to.exist;
+
+      expect(app.activeTab).to.equal(newTab);
+
+      // open file is a BPMN file
+      expectNewDiagramFile(newTab.file, 'bpmn');
+
+      // and editor is rendered, too
+      var tree = render(app);
+
       // expect BPMN tab with editor to be shown
       expect(select('.bpmn-editor', tree)).to.exist;
     });
@@ -600,11 +690,19 @@ describe('App', function() {
     it('should create new DMN tab', function() {
 
       // when
-      app.createDiagram('dmn');
-
-      var tree = render(app);
+      var newTab = app.createDiagram('dmn');
 
       // then
+      expect(newTab).to.exist;
+
+      expect(app.activeTab).to.equal(newTab);
+
+      // open file is a DMN file
+      expectNewDiagramFile(newTab.file, 'dmn');
+
+      // and editor is rendered, too
+      var tree = render(app);
+
       // expect DMN tab with editor to be shown
       expect(select('.dmn-editor', tree)).to.exist;
     });
@@ -626,8 +724,54 @@ describe('App', function() {
       var tree = render(app);
 
       // then
-      // expect BPMN tab with editor to be shown
+      // expect DMN tab with editor to be shown
       expect(select('.dmn-editor', tree)).to.exist;
+    });
+
+  });
+
+
+  describe('cmmn support', function() {
+
+    it('should create new DMN tab', function() {
+
+      // when
+      var newTab = app.createDiagram('cmmn');
+
+      // then
+      expect(newTab).to.exist;
+
+      expect(app.activeTab).to.equal(newTab);
+
+      // open file is a CMMN file
+      expectNewDiagramFile(newTab.file, 'cmmn');
+
+      // and editor is rendered, too
+      var tree = render(app);
+
+      // expect CMMN tab with editor to be shown
+      expect(select('.cmmn-editor', tree)).to.exist;
+    });
+
+
+    it('should open passed CMMN diagram file', function() {
+
+      // given
+      var openFile = createCmmnFile(cmmnXML);
+
+      // when
+      app.openTabs([ openFile ]);
+
+      // then
+      expect(app.activeTab.file).to.eql(openFile);
+
+      // and rendered ...
+
+      var tree = render(app);
+
+      // then
+      // expect CMMN tab with editor to be shown
+      expect(select('.cmmn-editor', tree)).to.exist;
     });
 
   });
@@ -1529,7 +1673,7 @@ describe('App', function() {
       // when
       app.closeTab(closingTab);
 
-        // then
+      // then
       expect(app.activeTab).to.eql(activeTab);
     });
 
@@ -1820,7 +1964,8 @@ describe('App', function() {
             expect(workspaceConfig).to.have.keys([
               'tabs',
               'activeTab',
-              'layout'
+              'layout',
+              'endpoints'
             ]);
 
             expect(workspaceConfig.tabs).to.have.length(0);
@@ -1848,7 +1993,8 @@ describe('App', function() {
             expect(workspaceConfig).to.have.keys([
               'tabs',
               'activeTab',
-              'layout'
+              'layout',
+              'endpoints'
             ]);
 
             expect(workspaceConfig.tabs).to.eql([ bpmnFile, dmnFile ]);
@@ -1857,6 +2003,32 @@ describe('App', function() {
 
             done();
           });
+        });
+
+        it('should persist endpoints', function(done) {
+          // given
+          var endpoints = ['first/endpoint', 'second/endpoint'];
+
+          // when
+          app.persistEndpoints(endpoints);
+
+          // then
+          app.persistWorkspace(function(err, workspaceConfig) {
+
+            expect(err).not.to.exist;
+
+            expect(workspaceConfig).to.have.keys([
+              'tabs',
+              'activeTab',
+              'layout',
+              'endpoints'
+            ]);
+
+            expect(workspaceConfig.endpoints).to.eql(endpoints);
+
+            done();
+          });
+
         });
 
       });
@@ -1884,10 +2056,13 @@ describe('App', function() {
             }
           };
 
+          var endpoints = ['first/endpoint', 'second/enpoint'];
+
           workspace.setSaved({
             tabs: [ bpmnFile, dmnFile ],
             activeTab: 1,
-            layout: layout
+            layout: layout,
+            endpoints: endpoints
           });
 
           // when
@@ -1900,6 +2075,7 @@ describe('App', function() {
             expect(app.tabs).to.have.length(3);
             expect(app.activeTab).to.eql(app.tabs[1]);
             expect(app.layout).to.eql(layout);
+            expect(app.endpoints).to.eql(endpoints);
 
             done();
           });
@@ -1925,6 +2101,9 @@ describe('App', function() {
 
             // empty tab is selected, too
             expect(app.activeTab).to.exist;
+
+            // default enpoint
+            expect(app.endpoints).to.eql(['http://localhost:8080/engine-rest/deployment/create']);
 
             done();
           });
@@ -2018,6 +2197,25 @@ describe('App', function() {
           done();
         });
 
+      });
+
+      it('should save when clicking save in endpoint config', function(done) {
+        //given
+        app.toggleOverlay('endpointConfig');
+        var tree = render(app);
+        var input = select('#endpoint-url', tree);
+        var configForm = select('.endpoint-configuration-form', tree);
+        simulateEvent(input, 'change', { target: { value: 'some/endpoint' } });
+
+        //when
+        simulateEvent(configForm, 'submit', { preventDefault: () => {} });
+
+        // then
+        app.on('workspace:persisted', function(err, workspaceConfig) {
+          expect(err).not.to.exist;
+          expect(workspaceConfig.endpoints).to.eql(['some/endpoint']);
+          done();
+        });
       });
 
     });
@@ -2337,6 +2535,48 @@ describe('App', function() {
 
   });
 
+
+  it('should deploy bpmn file', function(done) {
+    // given
+    var browser = app.browser;
+    var send = spy(browser, 'send');
+
+    var bpmnFile = createBpmnFile(bpmnXML);
+    var tenantId = 'some tenant id';
+    var deploymentName = 'some deployment name';
+    var payload = {
+      deploymentName: deploymentName,
+      tenantId: tenantId
+    };
+
+    app.saveTab = function(tab, cb) {
+      tab.setFile(bpmnFile);
+
+      cb(null, bpmnFile);
+    };
+
+    app.openTab(bpmnFile);
+
+    app.triggerAction('deploy-bpmn', payload, function(err) {
+      // then
+      if (err) {
+        done('Error: ', err);
+      }
+
+      var expectedPayload = {
+        file: bpmnFile,
+        deploymentName: deploymentName,
+        tenantId: tenantId
+      };
+
+      expect(send).calledWith('deploy:bpmn', expectedPayload, arg.any);
+      done();
+    });
+
+
+
+  });
+
 });
 
 
@@ -2369,4 +2609,22 @@ function patchSave(tabs, answer) {
 
 function userCanceled() {
   return new Error('user canceled');
+}
+
+
+function expectNewDiagramFile(diagramFile, expectedType) {
+
+  expect(diagramFile).to.exist;
+  expect(diagramFile.fileType).to.eql(expectedType);
+
+  expect(
+    definitionsId(diagramFile.contents)
+  ).to.match(/^[0-9a-zA-Z]{6,10}$/);
+}
+
+function definitionsId(contents) {
+
+  var match = /id="Definitions_([^"]+)"/.exec(contents);
+
+  return match && match[1];
 }
