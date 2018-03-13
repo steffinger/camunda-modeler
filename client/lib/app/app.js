@@ -55,6 +55,9 @@ function App(options) {
 
   BaseComponent.call(this, options);
 
+
+  this.state = {};
+
   this.layout = {
     propertiesPanel: {
       open: false,
@@ -253,21 +256,26 @@ function App(options) {
           label: 'Distribute Elements Vertically',
           action: this.compose('triggerAction', 'distributeVertically')
         }),
+      ]
+    },
+    editor: {
+      visible: false,
+      buttons: [
         Separator(),
         MultiButton({
           id: 'deploy',
           choices: [
             {
-              id: 'deploy-bpmn',
+              id: 'deploy-btn',
               icon: 'icon-deploy',
-              label: 'Deploy Current Process',
-              action: this.compose('triggerAction', 'show-deployment-config'),
+              label: 'Deploy Current Diagram',
+              action: this.compose('triggerAction', 'open-deployment-overlay'),
               primary: true
             },
             {
               id: 'deploy-endpoint-config',
-              label: 'Configure BPMN Deployment',
-              action: this.compose('triggerAction', 'show-engine-config')
+              label: 'Configure Deployment Endpoint',
+              action: this.compose('triggerAction', 'open-endpoint-overlay')
             }
           ]
         })
@@ -296,8 +304,8 @@ function App(options) {
     this.persistEndpoints(endpoints);
   });
 
-  this.events.on('deploy:bpmn', (payload, done) => {
-    this.triggerAction('deploy-bpmn', payload, done);
+  this.events.on('deploy', (payload, done) => {
+    this.triggerAction('deploy', payload, done);
   });
 
   this.events.on('workspace:changed', debounce((done) => {
@@ -314,7 +322,7 @@ function App(options) {
 
   this.events.on('tools:state-changed', (tab, newState) => {
 
-    var button;
+    var button, selectedEditor;
 
     if (this.activeTab !== tab) {
       return debug('Warning: state updated on incative tab! This should never happen!');
@@ -336,6 +344,17 @@ function App(options) {
         this.menuEntries[key].visible = false;
       }
     });
+
+    // check if the selected tab is an editor to make the editor option visible or not
+    selectedEditor = [ 'bpmn', 'cmmn', 'dmn' ].filter(key => newState[key])[0];
+
+    if (selectedEditor) {
+      this.menuEntries.editor.visible = true;
+      this.menuEntries.editor.name = selectedEditor;
+    } else {
+      this.menuEntries.editor.visible = false;
+      this.menuEntries.editor.name = null;
+    }
 
     // update export button state
     button = find(this.menuEntries.modeler.buttons, { id: 'export-as' });
@@ -365,11 +384,6 @@ function App(options) {
     button = find(this.menuEntries.bpmn.buttons, { id: 'set-color' });
     button.disabled = !newState.elementsSelected;
 
-    // update deploy status
-    if (typeof newState.deployDisabled !== 'undefined') {
-      button = find(this.menuEntries.bpmn.buttons, { id: 'deploy-bpmn' });
-      button.disabled = newState.deployDisabled;
-    }
 
 
     this.events.emit('changed');
@@ -400,7 +414,7 @@ function App(options) {
 
   this.events.on('dialog-overlay:toggle', this.compose('toggleOverlay'));
 
-  ///////// public API yea! //////////////////////////////////////
+  // public API yea! //////////////////
 
   /**
    * Listen to an app event
@@ -442,10 +456,11 @@ App.prototype.render = function() {
   var html =
     <div className="app" onDragover={ fileDrop(this.compose('openFiles')) }>
       <ModalOverlay
+        initializeState={ this.initializeState.bind(this) }
         isActive={ this._activeOverlay }
         content={ this._overlayContent }
         events={ this.events }
-        endpoints={ this.endpoints }/>
+        endpoints={ this.endpoints } />
       <MenuBar entries={ this.menuEntries } />
       <Tabbed
         className="main"
@@ -602,8 +617,9 @@ App.prototype.triggerAction = function(action, firstArg, secondArg) {
    * this makes sure to support passing callback to this function
    * callback can be passed in 2nd or 3rd position
    */
-  var options = firstArg,
-      done    = function() {};
+  var self = this,
+      options = firstArg,
+      done = function() {};
 
   if (typeof firstArg === 'function') {
     done = firstArg;
@@ -703,19 +719,35 @@ App.prototype.triggerAction = function(action, firstArg, secondArg) {
     return this.exportTab(activeTab, options.type);
   }
 
-  if (action === 'show-deployment-config') {
-    return this.toggleOverlay('deploymentConfig');
+  if (action === 'open-deployment-overlay') {
+
+    // clear state of deployment modal
+    this.setState({ DeploymentConfig: { } });
+
+    // save tab before opening deployment modal
+    return this.saveTab(activeTab, function(err) {
+
+      if (err) {
+        console.error('deploy:bpmn ' + err);
+
+        return done(err);
+      }
+
+      return self.toggleOverlay('deployDiagram');
+    });
   }
 
-  if (action === 'show-engine-config') {
-    return this.toggleOverlay('endpointConfig');
+  if (action === 'open-endpoint-overlay') {
+    return this.toggleOverlay('configureEndpoint');
   }
 
-  if (action === 'deploy-bpmn') {
+  if (action === 'deploy') {
+
     // make sure to save the active tab's file before deploying
     return this.saveTab(activeTab, function(err) {
       if (err) {
-        console.error('deploy:bpmn ' + err);
+        console.error('deploy ' + err);
+
         return done(err);
       }
 
@@ -725,15 +757,18 @@ App.prototype.triggerAction = function(action, firstArg, secondArg) {
         tenantId: options.tenantId
       };
 
-      browser.send('deploy:bpmn', payload, function(err, response) {
+      browser.send('deploy', payload, function(err, response) {
         if (err) {
-          console.error('deploy:bpmn ' + err);
+          console.error('deploy ' + err);
+
           return done(err);
         }
+
         return done();
       });
     });
   }
+
   // forward other actions to active tab
   activeTab.triggerAction(action, options);
 };
@@ -1324,7 +1359,7 @@ App.prototype.persistWorkspace = function(done) {
   // let others store stuff, too
   this.events.emit('workspace:persist', config);
 
-  //store bpmn deploy url
+  // store bpmn deploy url
   config.endpoints = this.endpoints;
 
   // actually save
@@ -1640,6 +1675,54 @@ App.prototype.recheckTabContent = function(tab) {
     });
 
   });
+};
+
+/**
+ * Sets new App state
+ * @param newState
+ */
+App.prototype.setState = function(newState) {
+  this.state = assign({}, this.state, newState);
+};
+
+/**
+ * Initializes state of a specific component
+ * @param key
+ * @param value
+ */
+App.prototype.initializeState = function(options) {
+  if (!options || options && (!options.key || !options.self)) {
+    return new Error('key must be provided');
+  }
+
+  var self = options.self,
+      key = options.key,
+      initialState = options.self.initialState,
+      newAppState = {};
+
+
+  if (this.state[key]) {
+    self.state = this.state[key];
+  } else {
+    newAppState[key] = initialState;
+
+    this.setState(newAppState);
+
+    self.state = newAppState[key];
+  }
+
+
+  self.setState = (newState) => {
+    var state = this.state[key];
+
+    newAppState[key] = assign({}, state, newState);
+
+    this.setState(newAppState);
+
+    self.state = newAppState[key];
+
+    this.emit('changed');
+  };
 };
 
 

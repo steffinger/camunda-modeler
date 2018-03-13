@@ -262,12 +262,14 @@ describe('App', function() {
       expect(select('.keyboard-shortcuts', tree)).to.not.exist;
     });
 
+
     it('should render endpoints configuration modal and close it', function() {
+
       // when
       // endpointConfig is toggled first time
-      app.toggleOverlay('endpointConfig');
-      var tree = render(app);
+      app.toggleOverlay('configureEndpoint');
 
+      var tree = render(app);
 
       // then
       // config modal should show
@@ -276,6 +278,7 @@ describe('App', function() {
       // when
       // endpointConfig is toggled second time
       app.toggleOverlay(false);
+
       tree = render(app);
 
       // then
@@ -285,12 +288,14 @@ describe('App', function() {
 
 
     describe('deployment configuration modal', function() {
-      it('should render deployment configuration modal and close it', function() {
+
+      it('should render modal and close it', function() {
+
         // when
         // endpointConfig is toggled first time
-        app.toggleOverlay('deploymentConfig');
-        var tree = render(app);
+        app.toggleOverlay('deployDiagram');
 
+        var tree = render(app);
 
         // then
         // config modal should show
@@ -299,6 +304,7 @@ describe('App', function() {
         // when
         // endpointConfig is toggled second time
         app.toggleOverlay(false);
+
         tree = render(app);
 
         // then
@@ -306,27 +312,90 @@ describe('App', function() {
         expect(select('.deployment-configuration', tree)).to.not.exist;
       });
 
-      it('should only submit deployment configuration form if there is a deployment name', function() {
+
+      it('should only submit form with deployment name', function() {
+
         // when
         // endpointConfig is toggled first time
         app.saveTab = function() {};
-        app.toggleOverlay('deploymentConfig');
-        var tree = render(app);
-        var deploymentNameInput = select('#deployment-name]', tree);
 
-        //then
+        app.toggleOverlay('deployDiagram');
+
+        var tree = render(app);
+
+        var deploymentNameInput = select('#deployment-name', tree);
+
+        // then
         expect(deploymentNameInput.properties.required).to.be.true;
 
-
-        //when
+        // when
         var triggerAction = spy(app, 'triggerAction');
-        var deploymentConfigForm = select('.deployment-configuration-form', tree);
-        simulateEvent(deploymentConfigForm, 'submit', { preventDefault: function() {} });
 
-        //then
+        var deploymentConfigForm = select('.deployment-configuration form', tree);
+
+        simulateEvent(deploymentConfigForm, 'submit', {
+          preventDefault: function() { },
+          target: {
+            'deployment-name': {
+              value: 'foo'
+            },
+            'tenant-id': {
+              value: ''
+            }
+          }
+        });
+
+        // then
         expect(triggerAction).to.be.called;
+      });
 
 
+      it('should show deployment status', function() {
+
+        // given
+        const LOADING = 'loading',
+              ERROR = 'error',
+              SUCCESS = 'success';
+
+        // when
+        app.toggleOverlay('deployDiagram');
+
+        app.setState({
+          DeployDiagramOverlay: {
+            status: LOADING
+          }
+        });
+
+        var tree = render(app);
+
+
+        // then
+        // config modal should show
+        expect(select('.deployment-configuration .icon-loading', tree)).to.exist;
+
+        // when
+        app.setState({
+          DeployDiagramOverlay: {
+            status: ERROR
+          }
+        });
+        tree = render(app);
+
+        // then
+        // config modal should show
+        expect(select('.deployment-configuration .status.error', tree)).to.exist;
+
+        // when
+        app.setState({
+          DeployDiagramOverlay: {
+            status: SUCCESS
+          }
+        });
+        tree = render(app);
+
+        // then
+        // config modal should show
+        expect(select('.deployment-configuration .status.success', tree)).to.exist;
       });
 
     });
@@ -1322,7 +1391,7 @@ describe('App', function() {
         dmnEditor.once('shown', function(context) {
 
           var modeler = dmnEditor.modeler,
-              drdJS  = modeler.getActiveViewer(),
+              drdJS = modeler.getActiveViewer(),
               elementFactory = drdJS.get('elementFactory'),
               canvas = drdJS.get('canvas'),
               modeling = drdJS.get('modeling'),
@@ -2200,14 +2269,19 @@ describe('App', function() {
       });
 
       it('should save when clicking save in endpoint config', function(done) {
-        //given
-        app.toggleOverlay('endpointConfig');
+        // given
+        app.toggleOverlay('configureEndpoint');
         var tree = render(app);
         var input = select('#endpoint-url', tree);
-        var configForm = select('.endpoint-configuration-form', tree);
-        simulateEvent(input, 'change', { target: { value: 'some/endpoint' } });
+        var configForm = select('.endpoint-configuration form', tree);
 
-        //when
+        simulateEvent(input, 'change', {
+          target: {
+            value: 'some/endpoint'
+          }
+        });
+
+        // when
         simulateEvent(configForm, 'submit', { preventDefault: () => {} });
 
         // then
@@ -2308,7 +2382,7 @@ describe('App', function() {
       });
 
 
-      it('should emit on editor "state-updated" event', function(done)  {
+      it('should emit on editor "state-updated" event', function(done) {
 
         // given
         app._addTab(tab);
@@ -2535,46 +2609,196 @@ describe('App', function() {
 
   });
 
+  describe('diagram deployment', function() {
+    var browser,
+        send,
+        dmnFile,
+        bpmnFile,
+        cmmnFile,
+        tenantId,
+        deploymentName,
+        payload;
 
-  it('should deploy bpmn file', function(done) {
-    // given
-    var browser = app.browser;
-    var send = spy(browser, 'send');
+    before(function() {
+      browser = app.browser;
 
-    var bpmnFile = createBpmnFile(bpmnXML);
-    var tenantId = 'some tenant id';
-    var deploymentName = 'some deployment name';
-    var payload = {
-      deploymentName: deploymentName,
-      tenantId: tenantId
-    };
+      send = spy(browser, 'send');
 
-    app.saveTab = function(tab, cb) {
-      tab.setFile(bpmnFile);
+      bpmnFile = createBpmnFile(bpmnXML);
+      dmnFile = createDmnFile(dmnXML);
+      cmmnFile = createDmnFile(cmmnXML);
 
-      cb(null, bpmnFile);
-    };
+      tenantId = 'some tenant id';
 
-    app.openTab(bpmnFile);
+      deploymentName = 'some deployment name';
 
-    app.triggerAction('deploy-bpmn', payload, function(err) {
-      // then
-      if (err) {
-        done('Error: ', err);
-      }
-
-      var expectedPayload = {
-        file: bpmnFile,
+      payload = {
         deploymentName: deploymentName,
         tenantId: tenantId
       };
+    });
 
-      expect(send).calledWith('deploy:bpmn', expectedPayload, arg.any);
-      done();
+    afterEach(function() {
+      spy = null;
     });
 
 
+    it('should deploy bpmn file', function(done) {
 
+      // given
+      app.saveTab = function(tab, cb) {
+        tab.setFile(bpmnFile);
+        cb(null, bpmnFile);
+      };
+
+      app.openTab(bpmnFile);
+
+      app.triggerAction('deploy', payload, function(err) {
+
+        // then
+        if (err) {
+          done('Error: ', err);
+        }
+
+        var expectedPayload = {
+          file: bpmnFile,
+          deploymentName: deploymentName,
+          tenantId: tenantId
+        };
+
+        expect(send).calledWith('deploy', expectedPayload, arg.any);
+
+        done();
+      });
+    });
+
+
+    it('should deploy dmn file', function(done) {
+
+      // given
+      app.saveTab = function(tab, cb) {
+        tab.setFile(dmnFile);
+
+        cb(null, dmnFile);
+      };
+
+      app.openTab(dmnFile);
+
+      app.triggerAction('deploy', payload, function(err) {
+
+        // then
+        if (err) {
+          done('Error: ', err);
+        }
+
+        var expectedPayload = {
+          file: dmnFile,
+          deploymentName: deploymentName,
+          tenantId: tenantId
+        };
+
+        expect(send).calledWith('deploy', expectedPayload, arg.any);
+
+        done();
+      });
+    });
+
+
+    it('should deploy cmmn file', function(done) {
+
+      // given
+      app.saveTab = function(tab, cb) {
+        tab.setFile(cmmnFile);
+
+        cb(null, cmmnFile);
+      };
+
+      app.openTab(cmmnFile);
+
+      app.triggerAction('deploy', payload, function(err) {
+
+        // then
+        if (err) {
+          done('Error: ', err);
+        }
+
+        var expectedPayload = {
+          file: cmmnFile,
+          deploymentName: deploymentName,
+          tenantId: tenantId
+        };
+
+        expect(send).calledWith('deploy', expectedPayload, arg.any);
+
+        done();
+      });
+
+    });
+
+  });
+
+  describe('state management', function() {
+
+    it('app should have empty initial state', function() {
+      expect(app.state).to.eql({});
+    });
+
+
+    it('component state should be initialized with its initial state', function() {
+
+      // given
+      var initializeState = app.initializeState.bind(app);
+
+      var expectedComponentState = { foo: 'bar' };
+
+      var SomeComponent = function(options) {
+        this.initialState = expectedComponentState;
+
+        options.initializeState({
+          self: this,
+          key: 'SomeComponent'
+        });
+      };
+
+      // when
+      var someComponent = new SomeComponent({ initializeState: initializeState });
+
+      // then
+      var expectedAppState = { 'SomeComponent': expectedComponentState };
+
+      expect(someComponent.state).to.eql(expectedComponentState);
+      expect(app.state).to.eql(expectedAppState);
+    });
+
+
+    it('component setState should change component state', function() {
+
+      // given
+      var initializeState = app.initializeState.bind(app);
+
+      var SomeComponent = function(options) {
+        this.initialState = { foo: 'bar' };
+
+        options.initializeState({
+          self: this,
+          key: 'SomeComponent'
+        });
+      };
+
+      // when
+      var someComponent = new SomeComponent({ initializeState: initializeState });
+
+      var expectedComponentState = { foo: 'foo' };
+
+      someComponent.setState(expectedComponentState);
+
+
+      // then
+      var expectedAppState = { 'SomeComponent': expectedComponentState };
+
+      expect(someComponent.state).to.eql(expectedComponentState);
+      expect(app.state).to.eql(expectedAppState);
+    });
   });
 
 });
