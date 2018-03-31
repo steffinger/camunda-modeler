@@ -102,7 +102,7 @@ DmnEditor.prototype.updateState = function(options = {}) {
 
     var selection;
 
-    if (activeView.type === 'decision-table') {
+    if (activeView.type === 'decisionTable') {
       var decisionTableViewer = modeler.getActiveViewer();
 
       selection = decisionTableViewer.get('selection');
@@ -220,14 +220,15 @@ DmnEditor.prototype.createModeler = function($el) {
   return new DmnJS({
     'position': 'absolute',
     'container': $el,
-    'decision-table': {
-      minColWidth: 200,
-      tableName: 'DMN Table'
-    },
     'drd': {
       additionalModules: [
         diagramOriginModule
       ]
+    },
+    common: {
+      keyboard: {
+        bindTo: $el
+      }
     }
   });
 };
