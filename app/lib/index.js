@@ -6,8 +6,11 @@ var electron = require('electron'),
 
 var path = require('path');
 
-var forEach = require('lodash/collection/forEach'),
-    got = require('got'),
+var {
+  forEach
+} = require('min-dash');
+
+var got = require('got'),
     fs = require('fs'),
     FormData = require('form-data');
 
@@ -158,6 +161,13 @@ renderer.on('dialog:saving-denied', function(done) {
 
 renderer.on('dialog:content-changed', function(done) {
   dialog.showDialog('contentChanged', done);
+});
+
+renderer.on('dialog:empty-file', function(options, done) {
+  dialog.showDialog('emptyFile', {
+    fileType: options.fileType,
+    name: options.name
+  }, done);
 });
 
 renderer.on('deploy', function(data, done) {

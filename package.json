@@ -1,6 +1,6 @@
 {
   "name": "camunda-modeler",
-  "version": "1.12.0",
+  "version": "1.14.0",
   "description": "Camunda Modeler for BPMN, DMN and CMMN, based on bpmn.io",
   "main": "app/lib/index.js",
   "scripts": {
@@ -33,7 +33,7 @@
     "glob": "^7.0.3",
     "got": "^8.0.3",
     "inherits": "^2.0.1",
-    "lodash": "^3.10.1",
+    "min-dash": "^3.0.0",
     "parents": "^1.0.1"
   },
   "devDependencies": {

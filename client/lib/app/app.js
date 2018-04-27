@@ -1,12 +1,15 @@
 'use strict';
 
-var merge = require('lodash/object/merge'),
-    bind = require('lodash/function/bind'),
-    assign = require('lodash/object/assign'),
-    find = require('lodash/collection/find'),
-    filter = require('lodash/collection/filter'),
-    map = require('lodash/collection/map'),
-    debounce = require('lodash/function/debounce');
+import {
+  merge,
+  bind,
+  assign,
+  find,
+  filter,
+  map,
+  matchPattern,
+  debounce
+} from 'min-dash';
 
 var inherits = require('inherits');
 
@@ -357,7 +360,9 @@ function App(options) {
     }
 
     // update export button state
-    button = find(this.menuEntries.modeler.buttons, { id: 'export-as' });
+    button = find(this.menuEntries.modeler.buttons, matchPattern({
+      id: 'export-as'
+    }));
 
     button.choices = (newState['exportAs'] || []).map((type) => {
       return EXPORT_BUTTONS[type];
@@ -381,7 +386,9 @@ function App(options) {
     });
 
     // update set color button state
-    button = find(this.menuEntries.bpmn.buttons, { id: 'set-color' });
+    button = find(this.menuEntries.bpmn.buttons, matchPattern({
+      id: 'set-color'
+    }));
     button.disabled = !newState.elementsSelected;
 
 
@@ -538,39 +545,79 @@ App.prototype.openFiles = function(files) {
   var dialog = this.dialog;
 
   series(files, (file, done) => {
-    var type = parseFileType(file);
 
-    if (!type) {
-      dialog.unrecognizedFileError(file, function(err) {
-        debug('open-diagram canceled: unrecognized file type', file);
+    if (!file.contents.length) {
 
-        return done(err);
-      });
+      // handle empty files
+      var fileType = file.name.split('.').pop();
 
-    } else {
-      if (namespace.hasOldNamespace(file.contents)) {
+      if ([ 'bpmn', 'dmn', 'cmmn' ].indexOf(fileType) === -1) {
+        return dialog.unrecognizedFileError(file, function(err) {
+          debug('open-diagram canceled: unrecognized file type', file);
 
-        dialog.convertNamespace(type, (err, answer) => {
-          if (err) {
-            debug('open-diagram error: %s', err);
-
-            return done(err);
-          }
-
-          if (isCancel(answer)) {
-            return done(null);
-          }
-
-          if (answer === 'yes') {
-            file.contents = namespace.replace(file.contents, type);
-          }
-
-          done(null, assign({}, file, { fileType: type }));
+          return done(err);
         });
-      } else {
-        done(null, assign({}, file, { fileType: type }));
       }
+
+      var options = {
+        fileType: fileType,
+        name: file.name
+      };
+
+      dialog.openEmptyFile(options, (err, answer) => {
+
+        if (isCancel(answer)) {
+          return done();
+        }
+
+        if (answer === 'create') {
+          var tabProvider = this._findTabProvider(fileType);
+
+          return done(null, tabProvider.createNewFile({
+            name: file.name,
+            path: file.path
+          }));
+        }
+      });
+    } else {
+      var type = parseFileType(file);
+
+      if (!type) {
+        dialog.unrecognizedFileError(file, function(err) {
+          debug('open-diagram canceled: unrecognized file type', file);
+
+          return done(err);
+        });
+
+      } else {
+
+        // handle old namespaces
+        if (namespace.hasOldNamespace(file.contents)) {
+
+          dialog.convertNamespace(type, (err, answer) => {
+            if (err) {
+              debug('open-diagram error: %s', err);
+
+              return done(err);
+            }
+
+            if (isCancel(answer)) {
+              return done(null);
+            }
+
+            if (answer === 'yes') {
+              file.contents = namespace.replace(file.contents, type);
+            }
+
+            done(null, assign({}, file, { fileType: type }));
+          });
+        } else {
+          done(null, assign({}, file, { fileType: type }));
+        }
+      }
+
     }
+
   }, (err, diagramFiles) => {
     if (err) {
       return debug('open-diagram canceled: %s', err);
@@ -589,7 +636,6 @@ App.prototype.openFiles = function(files) {
  * Open a new tab based on a file chosen by the user.
  */
 App.prototype.openDiagram = function() {
-
   var dialog = this.dialog;
 
   var cwd = getFilePath(this.activeTab);
@@ -1032,7 +1078,7 @@ App.prototype.saveTab = function(tab, options, done) {
 
     debug('exported %s \n%s', tab.id, file.contents);
 
-    var saveAs = isUnsaved(file) || options && options.saveAs;
+    var saveAs = !file.path || options && options.saveAs;
 
     this.saveFile(file, saveAs, updateTab);
   });
@@ -1073,6 +1119,8 @@ App.prototype.saveFile = function(file, saveAs, done) {
   }
 
   if (!saveAs) {
+    file.isUnsaved = false;
+
     return fileSystem.writeFile(assign({}, file), handleFileError);
   }
 
@@ -1089,6 +1137,8 @@ App.prototype.saveFile = function(file, saveAs, done) {
     }
 
     debug('save file %s as %s', file.name, suggestedFile.path);
+
+    file.isUnsaved = false;
 
     fileSystem.writeFile(assign({}, file, suggestedFile), handleFileError);
   });
@@ -1187,7 +1237,7 @@ App.prototype.closeTab = function(tab, done, hints) {
       file;
 
   if (typeof tab === 'string') {
-    tab = exists = find(this.tabs, { id: tab });
+    tab = exists = find(this.tabs, matchPattern({ id: tab }));
   } else {
     exists = contains(tabs, tab);
   }
@@ -1434,7 +1484,9 @@ App.prototype.restoreWorkspace = function(done) {
  * @param  {Boolean} isDisabled
  */
 App.prototype.updateMenuEntry = function(group, id, isDisabled) {
-  var button = find(this.menuEntries[group].buttons, { id: id });
+  var button = find(this.menuEntries[group].buttons, matchPattern({
+    id: id
+  }));
 
   button.disabled = isDisabled;
 
@@ -1551,7 +1603,7 @@ App.prototype.closeAllTabs = function() {
  */
 App.prototype.closeOtherTabs = function(tab) {
   if (tab && typeof tab === 'string') {
-    tab = find(this.tabs, { id: tab });
+    tab = find(this.tabs, matchPattern({ id: tab }));
   } else {
     tab = contains(this.tabs, tab) ? tab : null;
   }

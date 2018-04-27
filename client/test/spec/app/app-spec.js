@@ -14,8 +14,11 @@ var select = require('test/helper/vdom').select,
     render = require('test/helper/vdom').render,
     simulateEvent = require('test/helper/vdom').simulateEvent;
 
-var assign = require('lodash/object/assign'),
-    find = require('lodash/collection/find');
+import {
+  assign,
+  find,
+  matchPattern
+} from 'min-dash';
 
 var arg = require('test/helper/util/arg'),
     spy = require('test/helper/util/spy');
@@ -40,7 +43,8 @@ function createBpmnFile(xml, overrides) {
     path: 'diagram_1.bpmn',
     contents: xml,
     fileType: 'bpmn',
-    lastModified: new Date().getTime()
+    lastModified: new Date().getTime(),
+    isUnsaved: false
   }, overrides);
 }
 
@@ -49,7 +53,8 @@ function createBpmnActivityFile(overrides) {
     name: 'activiti.xml',
     path: 'activiti.xml',
     contents: activitiXML,
-    lastModified: new Date().getTime()
+    lastModified: new Date().getTime(),
+    isUnsaved: false
   }, overrides);
 }
 
@@ -59,7 +64,8 @@ function createDmnFile(xml, overrides) {
     path: 'diagram_1.dmn',
     contents: xml,
     fileType: 'dmn',
-    lastModified: new Date().getTime()
+    lastModified: new Date().getTime(),
+    isUnsaved: false
   }, overrides);
 }
 
@@ -69,11 +75,12 @@ function createCmmnFile(xml, overrides) {
     path: 'diagram_1.cmmn',
     contents: xml,
     fileType: 'cmmn',
-    lastModified: new Date().getTime()
+    lastModified: new Date().getTime(),
+    isUnsaved: true
   }, overrides);
 }
 
-var UNSAVED_FILE = { path: '[unsaved]' };
+var UNSAVED_FILE = { path: '', isUnsaved: true };
 
 
 describe('App', function() {
@@ -880,7 +887,7 @@ describe('App', function() {
 
       var invalidFile = createBpmnFile('FOO BAR', {
         name: 'text.txt',
-        path: '[unsaved]'
+        path: ''
       });
 
       var droppedFiles = [ validFile, invalidFile ];
@@ -944,6 +951,53 @@ describe('App', function() {
     });
 
 
+    it('should open empty BPMN file', function() {
+
+      // given
+      var openFile = createBpmnFile('');
+
+      var expectedFile = assign(openFile, {
+        contents: bpmnXML,
+        isInitial: true,
+        isUnsaved: true
+      });
+
+      dialog.setResponse('open', [ openFile ]);
+
+      dialog.setResponse('emptyFile', 'create');
+
+      // when
+      app.openDiagram();
+
+      // then
+      expect(app.activeTab.file).to.eql(expectedFile);
+
+      expect(dialog.open).to.have.been.calledWith(null);
+    });
+
+
+    it('should NOT open empty TXT file', function() {
+
+      // given
+      var lastTab = app.activeTab,
+          openFile = createBpmnFile('', {
+            name: 'foo.txt',
+            path: 'foo.txt'
+          });
+
+      dialog.setResponse('open', [ openFile ]);
+
+      // when
+      app.openDiagram();
+
+      // then
+      expect(dialog.unrecognizedFileError).to.have.been.called;
+
+      // still displaying last tab
+      expect(app.activeTab).to.eql(lastTab);
+    });
+
+
     it('should open DMN file', function() {
 
       // given
@@ -958,6 +1012,31 @@ describe('App', function() {
 
       // then
       expect(app.activeTab.file).to.eql(expectedFile);
+    });
+
+
+    it('should open empty DMN file', function() {
+
+      // given
+      var openFile = createDmnFile('');
+
+      var expectedFile = assign(openFile, {
+        contents: dmnXML,
+        isInitial: true,
+        isUnsaved: true
+      });
+
+      dialog.setResponse('open', [ openFile ]);
+
+      dialog.setResponse('emptyFile', 'create');
+
+      // when
+      app.openDiagram();
+
+      // then
+      expect(app.activeTab.file).to.eql(expectedFile);
+
+      expect(dialog.open).to.have.been.calledWith(null);
     });
 
 
@@ -1151,7 +1230,11 @@ describe('App', function() {
       var file = createBpmnFile(bpmnXML),
           tab = app.openTab(file);
 
-      var expectedFile = assign({}, file, { path: '/foo/bar', name: 'bar' });
+      var expectedFile = assign({}, file, {
+        path: '/foo/bar',
+        name: 'bar',
+        isUnsaved: false
+      });
 
       dialog.setResponse('saveAs', expectedFile);
 
@@ -1578,7 +1661,11 @@ describe('App', function() {
       var file = createBpmnFile(bpmnXML, UNSAVED_FILE),
           openTab = app.openTab(file);
 
-      var expectedFile = assign({}, file, { path: '/foo/bar', name: 'bar' });
+      var expectedFile = assign({}, file, {
+        path: '/foo/bar',
+        name: 'bar',
+        isUnsaved: false
+      });
 
       app.saveTab = function(tab, cb) {
         tab.setFile(expectedFile);
@@ -2423,7 +2510,8 @@ describe('App', function() {
               name: 'diagram_1.png',
               path: 'diagram_1.png',
               contents: 'foo',
-              fileType: 'png'
+              fileType: 'png',
+              isUnsaved: false
             };
 
         tab.activeEditor.exportAs = function(type, callback) {
@@ -2478,7 +2566,9 @@ describe('App', function() {
       it('should be enabled when exporting is allowed', function(done) {
         // given
         var bpmnFile = createBpmnFile(bpmnXML),
-            exportButton = find(app.menuEntries.modeler.buttons, { id: 'export-as' }),
+            exportButton = find(app.menuEntries.modeler.buttons, matchPattern({
+              id: 'export-as'
+            })),
             activeEditor;
 
         // when
@@ -2500,7 +2590,9 @@ describe('App', function() {
       it('should show export as "jpeg" and "svg"', function(done) {
         // given
         var bpmnFile = createBpmnFile(bpmnXML),
-            exportButton = find(app.menuEntries.modeler.buttons, { id: 'export-as' }),
+            exportButton = find(app.menuEntries.modeler.buttons, matchPattern({
+              id: 'export-as'
+            })),
             bpmnTab;
 
         app.openTabs([ bpmnFile ]);
@@ -2527,7 +2619,9 @@ describe('App', function() {
 
         it('when there are no open tabs', function() {
           // given
-          var exportButton = find(app.menuEntries.modeler.buttons, { id: 'export-as' });
+          var exportButton = find(app.menuEntries.modeler.buttons, matchPattern({
+            id: 'export-as'
+          }));
 
           // then
           expect(exportButton.disabled).to.be.true;
@@ -2543,7 +2637,9 @@ describe('App', function() {
 
           app.closeTab(app.activeTab);
 
-          exportButton = find(app.menuEntries.modeler.buttons, { id: 'export-as' });
+          exportButton = find(app.menuEntries.modeler.buttons, matchPattern({
+            id: 'export-as'
+          }));
 
           // then
           expect(exportButton.disabled).to.be.true;
@@ -2554,7 +2650,9 @@ describe('App', function() {
           // given
           var bpmnFile = createBpmnFile(bpmnXML),
               dmnFile = createDmnFile(dmnXML),
-              exportButton = find(app.menuEntries.modeler.buttons, { id: 'export-as' }),
+              exportButton = find(app.menuEntries.modeler.buttons, matchPattern({
+                id: 'export-as'
+              })),
               bpmnTab,
               activeEditor;
 
@@ -2581,7 +2679,9 @@ describe('App', function() {
         it('when switching editor views', function(done) {
           // given
           var bpmnFile = createBpmnFile(bpmnXML),
-              exportButton = find(app.menuEntries.modeler.buttons, { id: 'export-as' }),
+              exportButton = find(app.menuEntries.modeler.buttons, matchPattern({
+                id: 'export-as'
+              })),
               activeTab, xmlEditor;
 
           app.openTabs([ bpmnFile ]);
@@ -2608,6 +2708,7 @@ describe('App', function() {
     });
 
   });
+
 
   describe('diagram deployment', function() {
     var browser,
@@ -2736,6 +2837,7 @@ describe('App', function() {
     });
 
   });
+
 
   describe('state management', function() {
 

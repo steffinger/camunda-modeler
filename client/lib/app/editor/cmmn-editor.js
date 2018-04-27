@@ -2,17 +2,20 @@
 
 var inherits = require('inherits');
 
-var assign = require('lodash/object/assign');
+import {
+  assign
+} from 'min-dash';
 
-var domify = require('domify');
-
-var domClosest = require('min-dom/lib/closest');
+import {
+  domify,
+  closest as domClosest
+} from 'min-dom';
 
 var DiagramEditor = require('./diagram-editor');
 
 var CmmnJS = require('cmmn-js/lib/Modeler');
 
-var DiagramJSOrigin = require('diagram-js-origin'),
+var DiagramJSOrigin = require('diagram-js-origin').default,
     propertiesPanelModule = require('cmmn-js-properties-panel'),
     propertiesProviderModule = require('cmmn-js-properties-panel/lib/provider/camunda'),
     camundaModdlePackage = require('camunda-cmmn-moddle/resources/camunda');

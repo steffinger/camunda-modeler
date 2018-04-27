@@ -1,6 +1,8 @@
 'use strict';
 
-var assign = require('lodash/object/assign');
+import {
+  assign
+} from 'min-dash';
 
 var spyOn = require('test/helper/util/spy-on');
 
@@ -21,6 +23,7 @@ function Dialog(events) {
   this.namespaceResponse = null;
   this.reimportWarningResponse = null;
   this.contentChangedResponse = null;
+  this.emptyFileResponse = null;
 
   this.setResponse = function(type, fileOrError) {
     this[type + 'Response'] = fileOrError;
@@ -133,6 +136,14 @@ function Dialog(events) {
       done(this.namespaceResponse);
     } else {
       done(null, this.namespaceResponse);
+    }
+  };
+
+  this.openEmptyFile = function(type, done) {
+    if (this.emptyFileResponse instanceof Error) {
+      done(this.emptyFileResponse);
+    } else {
+      done(null, this.emptyFileResponse);
     }
   };
 

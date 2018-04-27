@@ -2,24 +2,28 @@
 
 var inherits = require('inherits');
 
-var assign = require('lodash/object/assign');
+import {
+  assign
+} from 'min-dash';
 
-var domify = require('domify');
-
-var domClosest = require('min-dom/lib/closest');
+import {
+  domify,
+  closest as domClosest
+} from 'min-dom';
 
 var DiagramEditor = require('./diagram-editor');
 
-var BpmnJS = require('bpmn-js/lib/Modeler');
+var BpmnJS = require('bpmn-js/lib/Modeler').default;
 
-var diagramOriginModule = require('diagram-js-origin'),
+var diagramOriginModule = require('diagram-js-origin').default,
     executableFixModule = require('./bpmn/executable-fix'),
     clipboardModule = require('./bpmn/clipboard'),
     minimapModule = require('diagram-js-minimap'),
     propertiesPanelModule = require('bpmn-js-properties-panel'),
     propertiesProviderModule = require('bpmn-js-properties-panel/lib/provider/camunda'),
     camundaModdlePackage = require('camunda-bpmn-moddle/resources/camunda'),
-    camundaModdleExtension = require('camunda-bpmn-moddle/lib');
+    camundaModdleExtension = require('camunda-bpmn-moddle/lib'),
+    signavioCompat = require('bpmn-js-signavio-compat').default;
 
 var WarningsOverlay = require('base/components/warnings-overlay');
 
@@ -413,7 +417,8 @@ BpmnEditor.prototype.createModeler = function($el, $propertiesEl) {
       propertiesPanelModule,
       propertiesProviderModule,
       propertiesPanelConfig,
-      camundaModdleExtension
+      camundaModdleExtension,
+      signavioCompat
     ].concat(pluginModules),
     elementTemplates: elementTemplatesLoader,
     moddleExtensions: { camunda: camundaModdlePackage },

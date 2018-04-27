@@ -2,7 +2,9 @@
 
 var path = require('path');
 
-var map = require('lodash/collection/map');
+var {
+  map
+} = require('min-dash');
 
 var filterExtensions = require('./util/filter-extensions'),
     ensureOptions = require('./util/ensure-opts');
@@ -171,6 +173,28 @@ Dialog.prototype.getDialogOptions = function(type, opts) {
         message: [
           'We cannot save or overwrite the current file.',
           'Do you want to save the file as.. ?'
+        ].join('\n')
+      };
+    },
+    emptyFile: function(options) {
+      ensureOptions([ 'fileType', 'name' ], options);
+
+      var type = options.fileType.toUpperCase();
+
+      return {
+        type: 'question',
+        title: [
+          'Empty ',
+          type,
+          ' file'
+        ].join(''),
+        buttons: [
+          { id: 'cancel', label: 'Cancel' },
+          { id: 'create', label: 'Create' }
+        ],
+        message: [
+          'The file "' + options.name + '" is empty.',
+          'Would you like to create a new ' + type + ' diagram?'
         ].join('\n')
       };
     }

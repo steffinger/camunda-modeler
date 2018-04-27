@@ -4,8 +4,10 @@ var slice = require('util/slice');
 
 var debug = require('debug')('file-drop');
 
-var domify = require('domify'),
-    domEvent = require('min-dom/lib/event');
+import {
+  domify,
+  event as domEvent
+} from 'min-dom';
 
 var OVERLAY_HTML = '<div class="drop-overlay">' +
                      '<div class="box">' +
